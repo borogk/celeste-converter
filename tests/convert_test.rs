@@ -65,9 +65,7 @@ fn data_to_png(data: &Vec<u8>) -> DynamicImage {
     convert::data_to_png(&mut input, &mut output).expect("Couldn't convert PNG to DATA");
     output.rewind().unwrap();
 
-    image::ImageReader::with_format(output, ImageFormat::Png)
-        .decode()
-        .unwrap()
+    image::ImageReader::with_format(output, ImageFormat::Png).decode().unwrap()
 }
 
 fn png_to_data(png: &DynamicImage) -> Vec<u8> {
@@ -84,10 +82,7 @@ fn assert_png_eq(actual: &DynamicImage, expected: &DynamicImage) {
     assert_eq!(actual.width(), expected.width());
     assert_eq!(actual.height(), expected.height());
 
-    assert_eq!(
-        actual.color().channel_count(),
-        expected.color().channel_count()
-    );
+    assert_eq!(actual.color().channel_count(), expected.color().channel_count());
     assert_eq!(actual.color().has_alpha(), expected.color().has_alpha());
 
     assert_eq!(actual.as_bytes(), expected.as_bytes());

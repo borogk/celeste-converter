@@ -12,11 +12,7 @@ pub fn png_to_data(from: &Path, to: &Path) -> Result<()> {
     convert(from, to, convert::png_to_data)
 }
 
-fn convert<F: Fn(&mut BufReader<File>, &mut BufWriter<File>) -> Result<()>>(
-    from: &Path,
-    to: &Path,
-    f: F,
-) -> Result<()> {
+fn convert<F: Fn(&mut BufReader<File>, &mut BufWriter<File>) -> Result<()>>(from: &Path, to: &Path, f: F) -> Result<()> {
     let from_file = File::open(from)?;
     let to_file = File::create(to)?;
 

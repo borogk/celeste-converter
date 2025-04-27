@@ -50,11 +50,7 @@ pub fn data_to_png<R: Read, W: Write>(input: &mut R, output: &mut W) -> Result<(
 
     let mut png_encoder = png::Encoder::new(output, width, height);
     png_encoder.set_depth(png::BitDepth::Eight);
-    png_encoder.set_color(if has_alpha {
-        png::ColorType::Rgba
-    } else {
-        png::ColorType::Rgb
-    });
+    png_encoder.set_color(if has_alpha { png::ColorType::Rgba } else { png::ColorType::Rgb });
 
     let mut png_writer = png_encoder.write_header()?;
     png_writer.write_image_data(&png_data)?;

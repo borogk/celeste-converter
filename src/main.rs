@@ -24,6 +24,5 @@ fn main() {
         "data2png" => file::data_to_png(from, to),
         "png2data" => file::png_to_data(from, to),
         _ => panic!("Unknown command {command}"),
-    }
-    .expect("Failed to execute");
+    }.expect("Failed to execute");
 }
