@@ -1,10 +1,12 @@
-use crate::convert;
+use crate::{convert, log};
 use anyhow::{bail, Result};
 use pathdiff::diff_paths;
 use same_file::is_same_file;
 use std::fs::{create_dir_all, read_dir, File};
 use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use rayon::prelude::*;
 
 pub fn data_to_png(input: PathBuf, output: Option<PathBuf>) -> Result<()> {
     convert(&input, output.as_ref(), "data", "png", convert::data_to_png)
@@ -14,7 +16,7 @@ pub fn png_to_data(input: PathBuf, output: Option<PathBuf>) -> Result<()> {
     convert(&input, output.as_ref(), "png", "data", convert::png_to_data)
 }
 
-pub fn convert<F: Fn(&mut BufReader<File>, &mut BufWriter<File>) -> Result<()>>(
+pub fn convert<F: Fn(&mut BufReader<File>, &mut BufWriter<File>) -> Result<()> + Sync>(
     input: &PathBuf,
     output: Option<&PathBuf>,
     input_ext: &str,
@@ -29,7 +31,7 @@ pub fn convert<F: Fn(&mut BufReader<File>, &mut BufWriter<File>) -> Result<()>>(
             convert_file_to_file(input, output.unwrap(), convert_fn)
         }
     } else if input.is_dir() {
-        println!("Input path is a directory: {}", input.display());
+        log!("Input path is a directory: {}", input.display());
 
         let output = match output {
             None => bail!("Output path must be specified"),
@@ -51,8 +53,8 @@ fn convert_file_to_file<F: Fn(&mut BufReader<File>, &mut BufWriter<File>) -> Res
     output: &PathBuf,
     convert_fn: F,
 ) -> Result<()> {
-    println!("Input file: {}", input.display());
-    println!("Output file: {}", output.display());
+    log!("Input file: {}", input.display());
+    log!("Output file: {}", output.display());
 
     if output.exists() && is_same_file(&input, &output)? {
         bail!("Input and output paths point to the same file");
@@ -60,7 +62,7 @@ fn convert_file_to_file<F: Fn(&mut BufReader<File>, &mut BufWriter<File>) -> Res
 
     let output_dir = output.parent().unwrap();
     if !output_dir.exists() {
-        println!("Ensuring output directory exists {}", output_dir.display());
+        log!("Ensuring output directory exists {}", output_dir.display());
         match create_dir_all(output_dir) {
             Ok(_) => (),
             Err(e) => bail!("Failed to create output directory {}: {}", output_dir.display(), e),
@@ -94,7 +96,7 @@ fn convert_file_to_dir<F: Fn(&mut BufReader<File>, &mut BufWriter<File>) -> Resu
     convert_file_to_file(input, &output_file_path, convert_fn)
 }
 
-fn convert_dir_to_dir<F: Fn(&mut BufReader<File>, &mut BufWriter<File>) -> Result<()>>(
+fn convert_dir_to_dir<F: Fn(&mut BufReader<File>, &mut BufWriter<File>) -> Result<()> + Sync>(
     input: &PathBuf,
     output: &PathBuf,
     input_ext: &str,
@@ -104,24 +106,22 @@ fn convert_dir_to_dir<F: Fn(&mut BufReader<File>, &mut BufWriter<File>) -> Resul
     let mut items: Vec<PathBuf> = Vec::new();
     scan_dir(&input, input_ext, 0, &mut items)?;
 
-    println!("Found {} input files", items.len());
-    let mut success = 0;
-    for (i, item_input_path) in items.iter().enumerate() {
-        println!("\n[{}/{}] Converting...", i + 1, items.len());
-
+    log!("Found {} input files", items.len());
+    let success = AtomicUsize::new(0);
+    items.par_iter().for_each(|item_input_path| {
         let file_name = item_input_path.file_stem().unwrap().to_str().unwrap();
         let relative_file_path = diff_paths(item_input_path, &input).unwrap();
         let relative_dir_path = relative_file_path.parent().unwrap();
         let item_output_path = output.join(relative_dir_path).join(file_name).with_extension(output_ext);
 
         match convert_file_to_file(item_input_path, &item_output_path, &convert_fn) {
-            Ok(_) => success += 1,
-            Err(e) => eprintln!("Error converting: {}", e),
+            Ok(_) => { success.fetch_add(1, Ordering::Relaxed); }
+            Err(e) => log!("Error converting: {}", e),
         }
-    }
+    });
 
     if items.len() > 0 {
-        println!("\n{}/{} converted successfully", success, items.len());
+        log!("{}/{} converted successfully", success.into_inner(), items.len());
     }
 
     Ok(())

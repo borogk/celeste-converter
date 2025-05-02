@@ -1,19 +1,22 @@
 use anyhow::anyhow;
 use celeste_converter::file::{data_to_png, png_to_data};
+use celeste_converter::log;
 use std::env;
 use std::path::PathBuf;
+use celeste_converter::rayon::init_rayon;
 
 fn main() {
-    println!("Celeste converter v{}", env!("CARGO_PKG_VERSION"));
-    println!();
+    init_rayon();
+    
+    log!("Celeste converter v{}\n", env!("CARGO_PKG_VERSION"));
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        println!("Usage:");
-        println!("    celeste-converter [COMMAND] [INPUT] [OUTPUT]");
-        println!("Commands:");
-        println!("    data2png    Convert from Celeste DATA format into PNG");
-        println!("    png2data    Convert from PNG into Celeste DATA format");
+        log!("Usage:");
+        log!("    celeste-converter [COMMAND] [INPUT] [OUTPUT]");
+        log!("Commands:");
+        log!("    data2png    Convert from Celeste DATA format into PNG");
+        log!("    png2data    Convert from PNG into Celeste DATA format");
         return;
     }
 
@@ -28,6 +31,6 @@ fn main() {
     };
 
     if command_result.is_err() {
-        eprintln!("Error: {}", command_result.unwrap_err());
+        log!("Error: {}", command_result.unwrap_err());
     }
 }

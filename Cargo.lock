@@ -149,6 +149,7 @@ dependencies = [
  "pathdiff",
  "png",
  "rand",
+ "rayon",
  "rstest",
  "rstest_reuse",
  "same-file",

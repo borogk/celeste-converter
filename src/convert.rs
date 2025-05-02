@@ -1,17 +1,18 @@
 use anyhow::{Result, anyhow};
 use image::GenericImageView;
 use std::io::{BufRead, Read, Seek, Write};
+use crate::log;
 
 /// Converts DATA to PNG, uses 'png' library for better performance.
 /// Output is limited to 24-bit RGB or 32-bit RGBA.
 pub fn data_to_png<R: Read, W: Write>(input: &mut R, output: &mut W) -> Result<()> {
-    println!("Converting DATA into PNG...");
+    log!("Converting DATA into PNG...");
     
     let width = read_u32(input)?;
     let height = read_u32(input)?;
     let has_alpha = read_bool(input)?;
 
-    println!("DATA image parameters: {width}x{height}, has alpha: {has_alpha}");
+    log!("DATA image parameters: {width}x{height}, has alpha: {has_alpha}");
 
     let bytes_per_pixel: usize = if has_alpha { 4 } else { 3 };
     let mut png_data = Vec::with_capacity(bytes_per_pixel * (width * height) as usize);
@@ -62,14 +63,14 @@ pub fn data_to_png<R: Read, W: Write>(input: &mut R, output: &mut W) -> Result<(
 
 /// Converts PNG into DATA, uses 'image' library for better compatibility.
 pub fn png_to_data<R: BufRead + Seek, W: Write>(input: &mut R, output: &mut W) -> Result<()> {
-    println!("Converting PNG into DATA...");
+    log!("Converting PNG into DATA...");
     
     let png = image::ImageReader::with_format(input, image::ImageFormat::Png).decode()?;
 
     let width = png.width();
     let height = png.height();
     let has_alpha = png.color().has_alpha();
-    println!("PNG input: {width}x{height}, has alpha: {has_alpha}");
+    log!("PNG input: {width}x{height}, has alpha: {has_alpha}");
 
     // Write image headers (width, height and alpha channel flag)
     write_u32(output, width)?;
