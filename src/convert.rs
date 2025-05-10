@@ -3,7 +3,7 @@ use crate::png_chunk::PngChunk;
 use anyhow::{anyhow, Result};
 use png::ColorType;
 use rayon::prelude::*;
-use std::io::{Cursor, Read, Write};
+use std::io::{Read, Write};
 
 const CHUNK_SIZE: usize = 65536;
 
@@ -17,22 +17,26 @@ pub fn data_to_png<R: Read, W: Write>(input: &mut R, output: &mut W) -> Result<(
 
     log!("DATA image parameters: {width}x{height}, has alpha: {has_alpha}");
 
-    let mut input_data = Vec::new();
-    input.read_to_end(&mut input_data)?;
-
     let output_data = if has_alpha {
-        data_to_png_chunk_rgba(input_data.as_slice())?
+        // DATA format with alpha has variable sample size (2 or 5 bytes)
+        // Parallel processing is not supported
+        data_to_png_rgba(input, (width * height) as usize)?
     } else {
+        // DATA format without alpha has uniform sample size (4 bytes)
+        // Process chunks in parallel
+
+        let mut input_data = Vec::new();
+        input.read_to_end(&mut input_data)?;
+
         let input_chunks: Vec<&[u8]> = input_data.chunks(CHUNK_SIZE * 4).collect();
-        let output_chunks: Vec<Vec<u8>> = input_chunks
+        let output_chunks: Vec<Result<Vec<u8>>> = input_chunks
             .par_iter()
-            .map(|c| data_to_png_chunk_rgb(c).unwrap())
+            .map(|c| data_to_png_chunk_rgb(c))
             .collect();
 
-        let capacity = output_chunks.iter().map(|c| c.len()).sum();
-        let mut output_data = Vec::with_capacity(capacity);
+        let mut output_data = Vec::with_capacity((width * height * 3) as usize);
         for chunk in output_chunks {
-            output_data.extend_from_slice(&chunk);
+            output_data.extend_from_slice(chunk?.as_slice());
         }
         output_data
     };
@@ -80,6 +84,7 @@ pub fn png_to_data<R: Read, W: Write>(input: &mut R, output: &mut W) -> Result<(
     write_u32(output, height)?;
     write_bool(output, has_alpha)?;
 
+    // Process PNG chunks in parallel
     let output_chunks: Vec<Vec<u8>> = if has_alpha {
         png_data
             .chunks(CHUNK_SIZE)
@@ -129,14 +134,13 @@ fn data_to_png_chunk_rgb(input: &[u8]) -> Result<Vec<u8>> {
     Ok(output)
 }
 
-fn data_to_png_chunk_rgba(input: &[u8]) -> Result<Vec<u8>> {
-    let max_position = input.len() as u64;
-    let mut input = Cursor::new(input);
-    let mut output = Vec::new();
+fn data_to_png_rgba<R: Read>(input: &mut R, pixel_count: usize) -> Result<Vec<u8>> {
+    let mut output = vec![0; pixel_count * 4];
 
-    while input.position() < max_position {
+    let mut pixel = 0;
+    while pixel < pixel_count {
         // Read RLE count
-        let rle_count = read_u8(&mut input)? as usize;
+        let rle_count = read_u8(input)? as usize;
         if rle_count == 0 {
             return Err(anyhow!("Unexpected RLE count value of 0"));
         }
@@ -145,11 +149,11 @@ fn data_to_png_chunk_rgba(input: &[u8]) -> Result<Vec<u8>> {
         let r: u8;
         let g: u8;
         let b: u8;
-        let a = read_u8(&mut input)?;
+        let a = read_u8(input)?;
         if a != 0 {
-            b = read_u8(&mut input)?;
-            g = read_u8(&mut input)?;
-            r = read_u8(&mut input)?;
+            b = read_u8(input)?;
+            g = read_u8(input)?;
+            r = read_u8(input)?;
         } else {
             b = 0;
             g = 0;
@@ -157,12 +161,15 @@ fn data_to_png_chunk_rgba(input: &[u8]) -> Result<Vec<u8>> {
         }
 
         // Output the next span of same-colored pixels
-        for _ in 0..rle_count {
-            output.push(r);
-            output.push(g);
-            output.push(b);
-            output.push(a);
+        for i in 0..rle_count {
+            let output_offset = (pixel + i) * 4;
+            output[output_offset + 0] = r;
+            output[output_offset + 1] = g;
+            output[output_offset + 2] = b;
+            output[output_offset + 3] = a;
         }
+
+        pixel += rle_count;
     }
 
     Ok(output)

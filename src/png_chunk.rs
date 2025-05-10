@@ -1,6 +1,7 @@
-use crate::unpack::PackedData;
 use png::{BitDepth, ColorType, OutputInfo};
 use std::borrow::Cow;
+use ColorType::*;
+use crate::unpack::unpack;
 
 pub struct PngChunk<'a> {
     data: &'a [u8],
@@ -17,21 +18,21 @@ impl PngChunk<'_> {
 
     pub fn rgb(&self) -> Vec<u8> {
         match self.png_info.color_type {
-            ColorType::Indexed => self.indexed_to_rgb(),
-            ColorType::Grayscale => self.grayscale_to_rgb(),
-            ColorType::GrayscaleAlpha => self.grayscale_alpha_to_rgb(),
-            ColorType::Rgb => self.rgb_to_rgb(),
-            ColorType::Rgba => self.rgba_to_rgb(),
+            Indexed => self.indexed_to_rgb(),
+            Grayscale => self.grayscale_to_rgb(),
+            GrayscaleAlpha => self.grayscale_alpha_to_rgb(),
+            Rgb => self.rgb_to_rgb(),
+            Rgba => self.rgba_to_rgb(),
         }
     }
 
     pub fn rgba(&self) -> Vec<u8> {
         match self.png_info.color_type {
-            ColorType::Indexed => self.indexed_to_rgba(),
-            ColorType::Grayscale => self.grayscale_to_rgba(),
-            ColorType::GrayscaleAlpha => self.grayscale_alpha_to_rgba(),
-            ColorType::Rgb => self.rgb_to_rgba(),
-            ColorType::Rgba => self.rgba_to_rgba(),
+            Indexed => self.indexed_to_rgba(),
+            Grayscale => self.grayscale_to_rgba(),
+            GrayscaleAlpha => self.grayscale_alpha_to_rgba(),
+            Rgb => self.rgb_to_rgba(),
+            Rgba => self.rgba_to_rgba(),
         }
     }
 
@@ -49,7 +50,7 @@ impl PngChunk<'_> {
     }
 
     fn indexed_to_rgb(&self) -> Vec<u8> {
-        let input = PackedData::new(self.data, self.pixel_count, self.png_info.bit_depth).unpack();
+        let input = unpack(self.data, self.pixel_count, self.png_info.bit_depth);
         let mut output = vec![0; self.pixel_count * 3];
         let palette = self.png_palette.as_ref().unwrap();
 
@@ -67,7 +68,7 @@ impl PngChunk<'_> {
     }
 
     fn indexed_to_rgba(&self) -> Vec<u8> {
-        let input = PackedData::new(self.data, self.pixel_count, self.png_info.bit_depth).unpack();
+        let input = unpack(self.data, self.pixel_count, self.png_info.bit_depth);
         let mut output = vec![0; self.pixel_count * 4];
         let palette = self.png_palette.as_ref().unwrap();
 
@@ -86,7 +87,7 @@ impl PngChunk<'_> {
     }
 
     fn grayscale_to_rgb(&self) -> Vec<u8> {
-        let input = PackedData::new(self.data, self.pixel_count, self.png_info.bit_depth).unpack();
+        let input = unpack(self.data, self.pixel_count, self.png_info.bit_depth);
         let mut output = vec![0; self.pixel_count * 3];
 
         let scale = match self.png_info.bit_depth {
@@ -109,7 +110,7 @@ impl PngChunk<'_> {
     }
 
     fn grayscale_to_rgba(&self) -> Vec<u8> {
-        let input = PackedData::new(self.data, self.pixel_count, self.png_info.bit_depth).unpack();
+        let input = unpack(self.data, self.pixel_count, self.png_info.bit_depth);
         let mut output = vec![0; self.pixel_count * 4];
 
         let scale = match self.png_info.bit_depth {
@@ -133,7 +134,7 @@ impl PngChunk<'_> {
     }
 
     fn grayscale_alpha_to_rgb(&self) -> Vec<u8> {
-        let input = PackedData::new(self.data, self.pixel_count * 2, self.png_info.bit_depth).unpack();
+        let input = unpack(self.data, self.pixel_count * 2, self.png_info.bit_depth);
         let mut output = vec![0; self.pixel_count * 3];
 
         let scale = match self.png_info.bit_depth {
@@ -157,7 +158,7 @@ impl PngChunk<'_> {
     }
 
     fn grayscale_alpha_to_rgba(&self) -> Vec<u8> {
-        let input = PackedData::new(self.data, self.pixel_count * 2, self.png_info.bit_depth).unpack();
+        let input = unpack(self.data, self.pixel_count * 2, self.png_info.bit_depth);
         let mut output = vec![0; self.pixel_count * 4];
 
         let scale = match self.png_info.bit_depth {
@@ -183,11 +184,11 @@ impl PngChunk<'_> {
     }
 
     fn rgb_to_rgb(&self) -> Vec<u8> {
-        PackedData::new(self.data, self.pixel_count * 3, self.png_info.bit_depth).unpack()
+        unpack(self.data, self.pixel_count * 3, self.png_info.bit_depth)
     }
 
     fn rgb_to_rgba(&self) -> Vec<u8> {
-        let input = PackedData::new(self.data, self.pixel_count * 3, self.png_info.bit_depth).unpack();
+        let input = unpack(self.data, self.pixel_count * 3, self.png_info.bit_depth);
         let mut output = vec![0; self.pixel_count * 4];
 
         for pixel in 0..self.pixel_count {
@@ -207,7 +208,7 @@ impl PngChunk<'_> {
     }
 
     fn rgba_to_rgb(&self) -> Vec<u8> {
-        let input = PackedData::new(self.data, self.pixel_count * 4, self.png_info.bit_depth).unpack();
+        let input = unpack(self.data, self.pixel_count * 4, self.png_info.bit_depth);
         let mut output = vec![0; self.pixel_count * 3];
 
         for pixel in 0..self.pixel_count {
@@ -226,6 +227,6 @@ impl PngChunk<'_> {
     }
     
     fn rgba_to_rgba(&self) -> Vec<u8> {
-        PackedData::new(self.data, self.pixel_count * 4, self.png_info.bit_depth).unpack()
+        unpack(self.data, self.pixel_count * 4, self.png_info.bit_depth)
     }
 }
