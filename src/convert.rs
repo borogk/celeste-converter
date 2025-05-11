@@ -1,5 +1,5 @@
 use crate::log;
-use crate::png_chunk::PngChunk;
+use crate::png::{Png, PngChunk};
 use anyhow::{anyhow, Result};
 use png::ColorType;
 use rayon::prelude::*;
@@ -55,44 +55,34 @@ pub fn data_to_png<R: Read, W: Write>(input: &mut R, output: &mut W) -> Result<(
 pub fn png_to_data<R: Read, W: Write>(input: &mut R, output: &mut W) -> Result<()> {
     log!("Converting PNG into DATA...");
 
-    let mut reader = png::Decoder::new(input).read_info()?;
-    let mut all_frames_data = vec![0; reader.output_buffer_size()];
+    let png = Png::load(input)?;
 
-    // Only read the first frame
-    let png_info = &reader.next_frame(&mut all_frames_data)?;
-    let png_palette = &reader.info().palette;
-    let png_data = PngChunk::new(
-        &all_frames_data[..png_info.buffer_size()],
-        png_info,
-        png_palette,
-    );
-
-    let width = png_info.width;
-    let height = png_info.height;
-    let has_alpha = png_info.color_type == ColorType::Rgba || png_info.color_type == ColorType::GrayscaleAlpha;
-    let color_type_str = match png_info.color_type {
+    let width = png.width;
+    let height = png.height;
+    let has_alpha = png.color_type == ColorType::Rgba || png.color_type == ColorType::GrayscaleAlpha;
+    let color_type_str = match png.color_type {
         ColorType::Indexed => "Indexed",
         ColorType::Grayscale => "Grayscale",
         ColorType::GrayscaleAlpha => "Grayscale alpha",
         ColorType::Rgb => "RGB",
         ColorType::Rgba => "RGBA",
     };
-    log!("PNG input: {}x{}, color type: {}, bit depth: {}", width, height, color_type_str, png_info.bit_depth as u8);
+    log!("PNG input: {}x{}, color type: {}, bit depth: {}", width, height, color_type_str, png.bit_depth as u8);
 
     // Write image headers (width, height and alpha channel flag)
-    write_u32(output, width)?;
-    write_u32(output, height)?;
+    write_u32(output, width as u32)?;
+    write_u32(output, height as u32)?;
     write_bool(output, has_alpha)?;
 
     // Process PNG chunks in parallel
     let output_chunks: Vec<Vec<u8>> = if has_alpha {
-        png_data
+        png
             .chunks(TARGET_CHUNK_SIZE)
             .par_iter()
             .map(|c| png_to_data_chunk_rgba(c))
             .collect()
     } else {
-        png_data
+        png
             .chunks(TARGET_CHUNK_SIZE)
             .par_iter()
             .map(|c| png_to_data_chunk_rgb(c))
@@ -180,8 +170,7 @@ fn png_to_data_chunk_rgb(input: &PngChunk) -> Vec<u8> {
     let mut output = Vec::new();
 
     let mut pixel = 0;
-    let pixel_count = input.width * input.height;
-    while pixel < pixel_count {
+    while pixel < input.len {
         let offset = pixel * 3;
         let pixel_rgb = &rgb[offset..offset + 3];
 
@@ -229,8 +218,7 @@ fn png_to_data_chunk_rgba(input: &PngChunk) -> Vec<u8> {
     let mut output = Vec::new();
 
     let mut pixel = 0;
-    let pixel_count = input.width * input.height;
-    while pixel < pixel_count {
+    while pixel < input.len {
         let offset = pixel * 4;
         let pixel_rgba = &rgba[offset..offset + 4];
 
