@@ -33,35 +33,54 @@ use std::io::{Cursor, Seek};
 #[case::ffmpeg_ya16be("ffmpeg/ya16be", true)]
 #[case::ffmpeg_monob("ffmpeg/monob", false)]
 #[case::ffmpeg_monob_prime_dimensions("ffmpeg/monob-prime-dimensions", false)]
-fn all_image_cases(#[case] image: &str) {}
+fn all_image_cases(#[case] image: &str, #[case] sixteen_bit: bool) {}
 
 #[apply(all_image_cases)]
-fn converted_png_equals_to_original(#[case] image: &str, #[case] sixteen_bit: bool) {
-    let original_data = load_data(image);
-    let original_png = load_png(image);
+fn data_to_png_matches_original(#[case] image: &str, #[case] sixteen_bit: bool) {
+    let original_data_bytes = load_data_bytes(image);
 
-    let converted_png = data_to_png(&original_data);
+    let converted_png = data_bytes_to_png_image(&original_data_bytes);
 
-    assert_png_eq(&converted_png, &original_png, sixteen_bit);
+    let original_png_image = load_png_image(image);
+    assert_png_image_eq(&converted_png, &original_png_image, sixteen_bit);
 }
 
 #[apply(all_image_cases)]
-fn png_survives_multiple_conversions(#[case] image: &str, #[case] sixteen_bit: bool) {
-    let original_data = load_data(image);
+fn data_to_png_twice_matches_original(#[case] image: &str, #[case] sixteen_bit: bool) {
+    let original_data_bytes = load_data_bytes(image);
 
-    let converted_png = data_to_png(&original_data);
-    let converted_data = png_to_data(&converted_png);
-    let twice_converted_png = data_to_png(&converted_data);
+    let converted_png_image = data_bytes_to_png_image(&original_data_bytes);
+    let converted_data_bytes = png_image_to_data_bytes(&converted_png_image);
+    let twice_converted_png_image = data_bytes_to_png_image(&converted_data_bytes);
 
-    assert_png_eq(&twice_converted_png, &converted_png, sixteen_bit);
+    assert_png_image_eq(&twice_converted_png_image, &converted_png_image, sixteen_bit);
 }
 
-fn load_png(image: &str) -> DynamicImage {
+#[apply(all_image_cases)]
+fn png_to_data_and_back_matches_original(#[case] case: &str, #[case] sixteen_bit: bool) {
+    let original_png_bytes = load_png_bytes(case);
+
+    let converted_data_bytes = png_bytes_to_data_bytes(&original_png_bytes);
+    let converted_png_image = data_bytes_to_png_image(&converted_data_bytes);
+
+    let original_png_image = load_png_image(case);
+    assert_png_image_eq(&converted_png_image, &original_png_image, sixteen_bit);
+}
+
+fn load_png_image(image: &str) -> DynamicImage {
     let path = format!("tests/png/{image}.png");
     image::ImageReader::open(path).unwrap().decode().unwrap()
 }
 
-fn load_data(image: &str) -> Vec<u8> {
+fn load_png_bytes(image: &str) -> Vec<u8> {
+    let path = format!("tests/png/{image}.png");
+    let mut file = File::open(path).unwrap();
+    let mut data = Vec::with_capacity(file.metadata().unwrap().len() as usize);
+    file.read_to_end(&mut data).unwrap();
+    data
+}
+
+fn load_data_bytes(image: &str) -> Vec<u8> {
     let path = format!("tests/data/{image}.data");
     let mut file = File::open(path).unwrap();
     let mut data = Vec::with_capacity(file.metadata().unwrap().len() as usize);
@@ -69,7 +88,7 @@ fn load_data(image: &str) -> Vec<u8> {
     data
 }
 
-fn data_to_png(data: &Vec<u8>) -> DynamicImage {
+fn data_bytes_to_png_image(data: &Vec<u8>) -> DynamicImage {
     let mut input = Cursor::new(data);
     let mut output = Cursor::new(Vec::new());
 
@@ -79,7 +98,7 @@ fn data_to_png(data: &Vec<u8>) -> DynamicImage {
     image::ImageReader::with_format(output, ImageFormat::Png).decode().unwrap()
 }
 
-fn png_to_data(png: &DynamicImage) -> Vec<u8> {
+fn png_image_to_data_bytes(png: &DynamicImage) -> Vec<u8> {
     let mut input = Cursor::new(Vec::new());
     png.write_to(&mut input, ImageFormat::Png).unwrap();
     input.rewind().unwrap();
@@ -89,7 +108,14 @@ fn png_to_data(png: &DynamicImage) -> Vec<u8> {
     output
 }
 
-fn assert_png_eq(actual: &DynamicImage, expected: &DynamicImage, sixteen_bit: bool) {
+fn png_bytes_to_data_bytes(png: &Vec<u8>) -> Vec<u8> {
+    let mut input = Cursor::new(png);
+    let mut output = Vec::new();
+    convert::png_to_data(&mut input, &mut output).expect("Couldn't convert DATA to PNG");
+    output
+}
+
+fn assert_png_image_eq(actual: &DynamicImage, expected: &DynamicImage, sixteen_bit: bool) {
     assert_eq!(actual.width(), expected.width(), "Images have different widths");
     assert_eq!(actual.height(), expected.height(), "Images have different heights");
 
