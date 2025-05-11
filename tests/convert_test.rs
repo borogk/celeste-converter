@@ -1,5 +1,5 @@
 use celeste_converter::convert;
-use image::DynamicImage;
+use image::{DynamicImage, GenericImageView};
 use image::ImageFormat;
 use rstest::rstest;
 use rstest_reuse::apply;
@@ -10,39 +10,50 @@ use std::io::{Cursor, Seek};
 
 #[template]
 #[rstest]
-#[case::white("white")]
-#[case::red("red")]
-#[case::green("green")]
-#[case::blue("blue")]
-#[case::cyan("cyan")]
-#[case::magenta("magenta")]
-#[case::yellow("yellow")]
-#[case::black("black")]
-#[case::transparent("transparent")]
-#[case::multi_color("multi-color")]
-#[case::big_test("big-test")]
-#[case::big_test_no_background("big-test-no-background")]
+#[case::white("white", false)]
+#[case::red("red", false)]
+#[case::green("green", false)]
+#[case::blue("blue", false)]
+#[case::cyan("cyan", false)]
+#[case::magenta("magenta", false)]
+#[case::yellow("yellow", false)]
+#[case::black("black", false)]
+#[case::transparent("transparent", false)]
+#[case::multi_color("multi-color", false)]
+#[case::big_test("big-test", false)]
+#[case::big_test_no_background("big-test-no-background", false)]
+#[case::ffmpeg_rgb24("ffmpeg/rgb24", false)]
+#[case::ffmpeg_rgba("ffmpeg/rgba", false)]
+#[case::ffmpeg_rgb48be("ffmpeg/rgb48be", true)]
+#[case::ffmpeg_rgba64be("ffmpeg/rgba64be", true)]
+#[case::ffmpeg_pal8("ffmpeg/pal8", false)]
+#[case::ffmpeg_gray("ffmpeg/gray", false)]
+#[case::ffmpeg_ya8("ffmpeg/ya8", false)]
+#[case::ffmpeg_gray16be("ffmpeg/gray16be", true)]
+#[case::ffmpeg_ya16be("ffmpeg/ya16be", true)]
+#[case::ffmpeg_monob("ffmpeg/monob", false)]
+#[case::ffmpeg_monob_prime_dimensions("ffmpeg/monob-prime-dimensions", false)]
 fn all_image_cases(#[case] image: &str) {}
 
 #[apply(all_image_cases)]
-fn converted_png_equals_to_original(#[case] image: &str) {
+fn converted_png_equals_to_original(#[case] image: &str, #[case] sixteen_bit: bool) {
     let original_data = load_data(image);
     let original_png = load_png(image);
 
     let converted_png = data_to_png(&original_data);
 
-    assert_png_eq(&converted_png, &original_png);
+    assert_png_eq(&converted_png, &original_png, sixteen_bit);
 }
 
 #[apply(all_image_cases)]
-fn png_survives_multiple_conversions(#[case] image: &str) {
+fn png_survives_multiple_conversions(#[case] image: &str, #[case] sixteen_bit: bool) {
     let original_data = load_data(image);
 
     let converted_png = data_to_png(&original_data);
     let converted_data = png_to_data(&converted_png);
     let twice_converted_png = data_to_png(&converted_data);
 
-    assert_png_eq(&twice_converted_png, &converted_png);
+    assert_png_eq(&twice_converted_png, &converted_png, sixteen_bit);
 }
 
 fn load_png(image: &str) -> DynamicImage {
@@ -78,12 +89,26 @@ fn png_to_data(png: &DynamicImage) -> Vec<u8> {
     output
 }
 
-fn assert_png_eq(actual: &DynamicImage, expected: &DynamicImage) {
-    assert_eq!(actual.width(), expected.width());
-    assert_eq!(actual.height(), expected.height());
+fn assert_png_eq(actual: &DynamicImage, expected: &DynamicImage, sixteen_bit: bool) {
+    assert_eq!(actual.width(), expected.width(), "Images have different widths");
+    assert_eq!(actual.height(), expected.height(), "Images have different heights");
 
-    assert_eq!(actual.color().channel_count(), expected.color().channel_count());
-    assert_eq!(actual.color().has_alpha(), expected.color().has_alpha());
+    assert_eq!(actual.color().has_alpha(), expected.color().has_alpha(), "Images have different alpha");
 
-    assert_eq!(actual.as_bytes(), expected.as_bytes());
+    for x in 0..actual.width() {
+        for y in 0..actual.height() {
+            let image::Rgba(actual_pixel) = actual.get_pixel(x, y);
+            let image::Rgba(expected_pixel) = expected.get_pixel(x, y);
+            if !sixteen_bit {
+                assert_eq!(actual_pixel, expected_pixel, "Images differ at X={}, Y={}", x, y);
+            } else {
+                // For 16-bit images a small tolerance is allowed, accounting for difference
+                // in how graphics editors deal with precision loss between 16 and 8 bit
+                for i in 0..4 {
+                    let diff = actual_pixel[i].abs_diff(expected_pixel[i]);
+                    assert!(diff <= 1, "Images differ at X={}, Y={}, channel={}", x, y, i);
+                }
+            }
+        }
+    }
 }

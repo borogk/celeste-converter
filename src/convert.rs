@@ -5,7 +5,7 @@ use png::ColorType;
 use rayon::prelude::*;
 use std::io::{Read, Write};
 
-const CHUNK_SIZE: usize = 65536;
+const TARGET_CHUNK_SIZE: usize = 0x10000;
 
 /// Converts DATA to PNG. Output is limited to 24-bit RGB or 32-bit RGBA.
 pub fn data_to_png<R: Read, W: Write>(input: &mut R, output: &mut W) -> Result<()> {
@@ -28,7 +28,7 @@ pub fn data_to_png<R: Read, W: Write>(input: &mut R, output: &mut W) -> Result<(
         let mut input_data = Vec::new();
         input.read_to_end(&mut input_data)?;
 
-        let input_chunks: Vec<&[u8]> = input_data.chunks(CHUNK_SIZE * 4).collect();
+        let input_chunks: Vec<&[u8]> = input_data.chunks(TARGET_CHUNK_SIZE * 4).collect();
         let output_chunks: Vec<Result<Vec<u8>>> = input_chunks
             .par_iter()
             .map(|c| data_to_png_chunk_rgb(c))
@@ -87,13 +87,13 @@ pub fn png_to_data<R: Read, W: Write>(input: &mut R, output: &mut W) -> Result<(
     // Process PNG chunks in parallel
     let output_chunks: Vec<Vec<u8>> = if has_alpha {
         png_data
-            .chunks(CHUNK_SIZE)
+            .chunks(TARGET_CHUNK_SIZE)
             .par_iter()
             .map(|c| png_to_data_chunk_rgba(c))
             .collect()
     } else {
         png_data
-            .chunks(CHUNK_SIZE)
+            .chunks(TARGET_CHUNK_SIZE)
             .par_iter()
             .map(|c| png_to_data_chunk_rgb(c))
             .collect()
@@ -180,7 +180,8 @@ fn png_to_data_chunk_rgb(input: &PngChunk) -> Vec<u8> {
     let mut output = Vec::new();
 
     let mut pixel = 0;
-    while pixel < input.pixel_count {
+    let pixel_count = input.width * input.height;
+    while pixel < pixel_count {
         let offset = pixel * 3;
         let pixel_rgb = &rgb[offset..offset + 3];
 
@@ -228,7 +229,8 @@ fn png_to_data_chunk_rgba(input: &PngChunk) -> Vec<u8> {
     let mut output = Vec::new();
 
     let mut pixel = 0;
-    while pixel < input.pixel_count {
+    let pixel_count = input.width * input.height;
+    while pixel < pixel_count {
         let offset = pixel * 4;
         let pixel_rgba = &rgba[offset..offset + 4];
 
