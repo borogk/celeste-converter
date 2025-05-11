@@ -33,21 +33,21 @@ use std::io::{Cursor, Seek};
 #[case::ffmpeg_ya16be("ffmpeg/ya16be", true)]
 #[case::ffmpeg_monob("ffmpeg/monob", false)]
 #[case::ffmpeg_monob_prime_dimensions("ffmpeg/monob-prime-dimensions", false)]
-fn all_image_cases(#[case] image: &str, #[case] sixteen_bit: bool) {}
+fn all_image_cases(#[case] case: &str, #[case] sixteen_bit: bool) {}
 
 #[apply(all_image_cases)]
-fn data_to_png_matches_original(#[case] image: &str, #[case] sixteen_bit: bool) {
-    let original_data_bytes = load_data_bytes(image);
+fn data_to_png_matches_original(#[case] case: &str, #[case] sixteen_bit: bool) {
+    let original_data_bytes = load_data_bytes(case);
 
     let converted_png = data_bytes_to_png_image(&original_data_bytes);
 
-    let original_png_image = load_png_image(image);
+    let original_png_image = load_png_image(case);
     assert_png_image_eq(&converted_png, &original_png_image, sixteen_bit);
 }
 
 #[apply(all_image_cases)]
-fn data_to_png_twice_matches_original(#[case] image: &str, #[case] sixteen_bit: bool) {
-    let original_data_bytes = load_data_bytes(image);
+fn data_to_png_twice_matches_original(#[case] case: &str, #[case] sixteen_bit: bool) {
+    let original_data_bytes = load_data_bytes(case);
 
     let converted_png_image = data_bytes_to_png_image(&original_data_bytes);
     let converted_data_bytes = png_image_to_data_bytes(&converted_png_image);
